@@ -1,7 +1,8 @@
-name: xp-decay
-main: xp-decay.core
+name: xpdecay
+main: cljminecraft.ClojurePlugin
 version: 1.0.0
 website: www.github.com/taufiqkh
 author: Taufiq Hoven
 description: Xp decay
 depend: [clj-minecraft]
+class-loader-of: clj-minecraft
