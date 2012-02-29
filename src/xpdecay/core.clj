@@ -7,8 +7,13 @@
 
 (def ^{:doc "Whether or not a fire should be set when the explosion occurs"} ^:const DEFAULT_SET_FIRE false)
 
+(defn xp-to-next-level [current-level] (+ 7 (bit-shift-right (* current-level 7) 1)))
+
+(def ^{:doc "Starting level for a player"} ^:const ^int DEFAULT_START_LEVEL 50)
+
 ; Set to level 51 experience - 1
-(def ^{:doc "Starting experience for a player"} ^:const ^int DEFAULT_START_EXPERIENCE (+ 7 (bit-shift-right (* 50 7) 1)))
+(def ^{:doc "Starting experience for a player"} ^:const ^int DEFAULT_START_EXPERIENCE
+  (dec (reduce + (map xp-to-next-level (range 0 (inc DEFAULT_START_LEVEL))))))
 
 (def ^{:doc "Ticks per second on an ideal server"} ^:const SERVER_TICKS_PER_SEC 20)
 
@@ -24,31 +29,36 @@
 
 (def state-ref (Plugin-state. (ref (hash-map)) on-zero-xp!))
 
-(defn info [msg]
-  (.info logger msg))
+(defn info [msg & args]
+  (.info logger (apply format msg args)))
 
-(defn debug [msg]
-  (.debug logger msg))
+(defn debug [msg & args]
+  (.debug logger (apply format msg args)))
 
-(defprotocol RespawnEventHandler
-  (on-respawn [respawn-plugin ^org.bukkit.event.player.PlayerRespawnEvent player-event]))
-
-(deftype EventHandler [plugin]
-  RespawnEventHandler
-  org.bukkit.event.Listener
-  (^{EventHandler {:priority EventPriority/NORMAL}}
-    on-respawn [respawn-plugin player-event] (info "respawn event")))
-
-(defn on-respawn! [plugin player]
+(defn on-death! [plugin player-death-event]
   "Sets the player experience to the defined starting experience"
-  (.setExperience player DEFAULT_START_EXPERIENCE))
+  (info "respawn event")
+  (doto player-death-event
+    (.setNewLevel DEFAULT_START_LEVEL)
+    (.setNewExp DEFAULT_START_EXPERIENCE)
+    (.setNewTotalExp DEFAULT_START_EXPERIENCE)
+    (.setDroppedExp 0)))
+
+(definterface DeathEventHandler
+  (ondeath [^org.bukkit.event.entity.PlayerDeathEvent player-event]))
+
+(deftype XpDecayEventHandler [plugin]
+  org.bukkit.event.Listener
+  DeathEventHandler
+  (^{org.bukkit.event.EventHandler {:priority org.bukkit.event.EventPriority/NORMAL}}
+    ondeath [this ^org.bukkit.event.entity.PlayerDeathEvent player-event] (on-death! plugin player-event)))
 
 (defn reduce-xp! [plugin zero-xp-trigger player]
   "Reduces xp on the specified player and calls zero-xp-trigger if that
 player's experience has fallen to zero or below. The zero-xp-trigger function
 may have side effects."
-  (let [new-xp (max 0 (- (.getExperience player) DEFAULT_XP_DECREMENT))]
-    (.setExperience player new-xp)
+  (let [new-xp (max 0 (- (.getTotalExperience player) DEFAULT_XP_DECREMENT))]
+    (.setTotalExperience player new-xp)
     (if (= new-xp 0)
       (zero-xp-trigger player))))
 
@@ -73,7 +83,7 @@ player and perform any additional triggered actions."
 (defn enable-plugin [clj-plugin-loader]
   (info (format "Start xp: %d" DEFAULT_START_EXPERIENCE))
   (let [plugin-manager (-> clj-plugin-loader .getServer .getPluginManager)]
-    (.registerEvents plugin-manager (EventHandler. clj-plugin-loader) clj-plugin-loader)))
+    (.registerEvents plugin-manager (XpDecayEventHandler. clj-plugin-loader) clj-plugin-loader)))
 
 (defn disable-plugin [clj-plugin-loaded]
   nil)
