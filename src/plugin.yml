@@ -6,3 +6,9 @@ author: Taufiq Hoven
 description: Xp decay
 depend: [clj-minecraft]
 class-loader-of: clj-minecraft
+commands:
+    xpd:
+        description: "XP Decay commands"
+        usage: |
+            /xpd add <loggedInPlayerName>
+        aliases: []
