@@ -5,6 +5,7 @@ website: www.github.com/taufiqkh
 author: Taufiq Hoven
 description: Xp decay
 depend: [clj-minecraft]
+softdepend: [Multiverse-Core,Spout]
 class-loader-of: clj-minecraft
 commands:
     xpd:

@@ -1,5 +1,6 @@
 (ns xpdecay.core
-  "Xp decay plugin for Bukkit")
+  "Xp decay plugin for Bukkit"
+  (:use xpdecay.command))
   ; TODO: Rewrite with less of an imperative style
 
 (def ^{:doc "Default decrement of XP"} ^:const DEFAULT_XP_DECREMENT 10)
@@ -70,7 +71,6 @@ may have side effects."
   "Actions the players in the given plugin."
   (let [state @state-ref
         action! (partial reduce-xp! plugin on-zero-xp!)]
-    (info "Actioning players %s" (pr-str (:players state)))
     (doseq [player-name (:players state)]
       (let [player (.getPlayer (.getServer plugin) player-name)]
         (if-not (nil? player)
@@ -82,18 +82,34 @@ player and perform any additional triggered actions."
   (let [scheduler (-> plugin .getServer .getScheduler)]
     (.scheduleAsyncRepeatingTask scheduler plugin #(action-players plugin) SERVER_TICKS_PER_SEC SERVER_TICKS_PER_SEC)))
 
+(defn alter-players [func & args]
+  (dosync
+    (alter state-ref assoc :players (apply func (:players @state-ref) args))))
+
+(defn process-subcommand [sender subcommand label args]
+  "Process the subcommand using the arguments given"
+  (case subcommand
+    "add" ;(.hasPermission sender "xpdecay.player.add"))
+    (let [player-name (aget args 0)]
+      (alter-players conj player-name)
+      (.sendMessage sender (format "Player %s added to the xp decay list." player-name))
+      (info "Sender %s added %s to the xp decay list" (.getName sender) player-name)
+      true)
+    "remove"
+    (let [player-name (aget args 0)]
+      (alter-players dissoc player-name)
+      (.sendMessage sender (format "Player %s removed from the xp decay list." player-name))
+      (info "Sender %s added %s to the xp decay list" (.getName sender) player-name)
+      true))
+    (do (.sendMessage sender (format "Unknown subcommand: %s" aget args 0)) false))
+
 (defn gen-command-executor []
+  "Generates a command executor for processing subcommands"
   (reify org.bukkit.command.CommandExecutor
     (onCommand [this sender command label args]
-               (if (.equals "add" (aget args 0)) ;(.hasPermission sender "xpdecay.player.add"))
-                 (let [player-name (aget args 1)]
-                   (dosync
-                     (alter state-ref assoc :players (conj (:players @state-ref) player-name)))
-                   (.sendMessage sender (format "Player %s added to the xp decay list." player-name))
-                   (info (pr-str @state-ref))
-                   (info "Sender %s added %s to the xp decay list" (.getName sender) player-name)
-                   true)
-                 (do (.sendMessage sender "Unknown subcommand") false)))))
+               (if (= (alength args) 0)
+                 false
+                 (process-subcommand sender command label args)))))
 
 (defn enable-plugin [clj-plugin-loader]
   (info (format "Start xp: %d" DEFAULT_START_EXPERIENCE))
