@@ -21,6 +21,8 @@
 
 (def ^{:doc "Default interval, in seconds, for reducing xp"} ^:const DEFAULT_XP_DECAY_INTERVAL 5)
 
+(def ^{:doc "Subcommands that are available"} SUBCOMMAND_OPTIONS {:add [:player-name] :remove [:player-name]})
+
 (def logger (java.util.logging.Logger/getLogger "Minecraft"))
 
 (defrecord Plugin-state [players trigger])
@@ -86,30 +88,38 @@ player and perform any additional triggered actions."
   (dosync
     (alter state-ref assoc :players (apply func (:players @state-ref) args))))
 
-(defn process-subcommand [sender subcommand label args]
+(defn process-subcommand! [sender command label subcommand-data]
   "Process the subcommand using the arguments given"
-  (case subcommand
-    "add" ;(.hasPermission sender "xpdecay.player.add"))
-    (let [player-name (aget args 0)]
-      (alter-players conj player-name)
-      (.sendMessage sender (format "Player %s added to the xp decay list." player-name))
-      (info "Sender %s added %s to the xp decay list" (.getName sender) player-name)
-      true)
-    "remove"
-    (let [player-name (aget args 0)]
-      (alter-players dissoc player-name)
-      (.sendMessage sender (format "Player %s removed from the xp decay list." player-name))
-      (info "Sender %s added %s to the xp decay list" (.getName sender) player-name)
-      true))
-    (do (.sendMessage sender (format "Unknown subcommand: %s" aget args 0)) false))
+  (if (= :no-args subcommand-data)
+    false
+    (let [subcommand (:subcommand subcommand-data)
+          options (:options subcommand-data)]
+      (case subcommand
+        :add ;(.hasPermission sender "xpdecay.player.add"))
+        (if (contains? options :player-name)
+          (let [player-name (:player-name options)]
+            (alter-players conj player-name)
+            (.sendMessage sender (format "Player %s added to the xp decay list." player-name))
+            (info "Sender %s added %s to the xp decay list" (.getName sender) player-name)
+            true)
+          false)
+        :remove
+        (if (contains? options :player-name)
+          (let [player-name (:player-name options)]
+            (alter-players dissoc player-name)
+            (.sendMessage sender (format "Player %s removed from the xp decay list." player-name))
+            (info "Sender %s added %s to the xp decay list" (.getName sender) player-name)
+            true)
+          false)
+        :unknown
+        (do (.sendMessage sender (format "Unknown subcommand: %s" aget args 0)) false)))))
 
 (defn gen-command-executor []
   "Generates a command executor for processing subcommands"
   (reify org.bukkit.command.CommandExecutor
     (onCommand [this sender command label args]
-               (if (= (alength args) 0)
-                 false
-                 (process-subcommand sender command label args)))))
+               (let [subcommand-data (create-subcommand args SUBCOMMAND_OPTIONS)]
+                 (process-subcommand! sender command label subcommand-data)))))
 
 (defn enable-plugin [clj-plugin-loader]
   (info (format "Start xp: %d" DEFAULT_START_EXPERIENCE))

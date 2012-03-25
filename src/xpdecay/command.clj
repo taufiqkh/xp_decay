@@ -1,6 +1,8 @@
 (ns xpdecay.command
   "Provides command and subcommand processing")
 
+(defrecord Subcommand [subcommand options])
+
 (defn array-slice
   ([array start]
     "Returns a slice of the given array from the start index to the end of the array, or an empty array if start
@@ -26,17 +28,18 @@ the value found. Any arguments that are additional are mapped from the :_remain 
           (assoc matched-options :_remain (take-last (- num-subcommand-args num-accepted-options) subcommand-args))
           matched-options)))))
 
-(defn map-command-options [args accepted-options]
-  "Given a set of command arguments and accepted options, retrieves the subcommand if one exists, and provides a map
-from the subcommand as a keyword to a sequence of its options. accepted-options is a map of each recognised subcommand
-to a sequence of options that it accepts. If no subcommand is found, returns :no-args. If a subcommand is found but not
-recognised, returns a map with the :unknown key mapping to a sequence containing the remaining arguments."
+(defn create-subcommand [args accepted-options]
+  "Given a set of command arguments and accepted options, retrieves the subcommand if one exists, and provides a
+Subcommand record containing the subcommand as a keyword and its options. accepted-options is a map of each recognised
+subcommand to a sequence of options that it accepts. If no subcommand is found, returns :no-args. If a subcommand is
+found but not recognised, returns a record with the :unknown subcommand and a sequence containing the remaining
+arguments."
   (let [args-length (alength args)]
     (if (= args-length 0) :no-args
-      (let [subcommand (aget args 0)]
+      (let [subcommand (keyword (aget args 0))]
         (if (contains? (keys accepted-options) subcommand)
-          (map-subcommand-options args (get accepted-options subcommand))
-          {:unknown (if (= args-length 1)
-                      []
-                      (array-slice args 1))})))))
-
+          (Subcommand. subcommand (map-subcommand-options args (get accepted-options subcommand)))
+          (Subcommand. :unknown
+                      (if (= args-length 1)
+                        []
+                        (array-slice args 1))))))))
